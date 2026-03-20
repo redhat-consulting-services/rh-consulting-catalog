@@ -1,0 +1,53 @@
+name: "🐛 Bug Report"
+description: "Report a problem with the operator catalog."
+title: "[BUG]: "
+labels: ["bug"]
+assignees: []
+projects: ["redhat-consulting-services/1"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before submitting a bug report:**
+        - Check existing issues for duplicates.
+        - Ensure you are using the latest version of the catalog.
+
+  - type: input
+    id: openshift_version
+    attributes:
+      label: "OpenShift Version"
+      description: "Which version of OpenShift are you running?"
+      placeholder: "e.g., 4.17.3"
+
+  - type: input
+    id: operator
+    attributes:
+      label: "Affected Operator"
+      description: "Which operator or catalog entry is affected?"
+      placeholder: "e.g., ocp-support-web-operator"
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Bug Description"
+      description: "Describe the bug in detail."
+      placeholder: "Error messages, unexpected behavior, etc."
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to Reproduce"
+      description: "List the steps to reproduce the bug."
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected Behavior"
+      description: "What did you expect to happen?"
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Actual Behavior"
+      description: "What actually happened?"

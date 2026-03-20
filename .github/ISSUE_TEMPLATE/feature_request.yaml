@@ -1,0 +1,32 @@
+name: "✨ Feature Request"
+description: "Suggest a new feature or improvement for the rh-consulting-catalog."
+title: "[FEATURE] "
+labels: ["feature request"]
+assignees: []
+
+body:
+  - type: input
+    id: feature
+    attributes:
+      label: "Feature Description"
+      description: "Describe the feature you would like to see."
+      placeholder: "e.g., Add a new operator to the catalog"
+
+  - type: input
+    id: operator
+    attributes:
+      label: "Related Operator (if applicable)"
+      description: "Which operator does this feature relate to, if any?"
+      placeholder: "e.g., ocp-support-web-operator"
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: "Benefits / Use Cases"
+      description: "Explain why this feature would be useful."
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives Considered"
+      description: "Any alternatives you've considered, if any."
