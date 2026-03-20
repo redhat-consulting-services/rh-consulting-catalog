@@ -1,0 +1,147 @@
+name: Update Catalog Index
+
+on:
+  workflow_dispatch:
+    inputs:
+      operator_name:
+        description: 'Package name of the operator (e.g. multi-tenant-operator)'
+        required: true
+        type: string
+      operator_version:
+        description: 'Semantic version of the operator bundle (e.g. 1.2.0)'
+        required: true
+        type: string
+      operator_description:
+        description: 'Short markdown description (used on first-time package registration only)'
+        required: false
+        type: string
+      bundle_image:
+        description: |
+          Fully-qualified bundle OCI image reference.
+          (e.g. quay.io/redhat-consulting-services/multi-tenant-operator-bundle:v1.2.0)
+        required: true
+        type: string
+      channel:
+        description: 'Channel to publish the bundle into (e.g. stable, alpha)'
+        required: false
+        default: 'stable'
+        type: string
+      replaces_bundle:
+        description: |
+          Bundle name this version replaces – defines the upgrade edge.
+          Format: <operator_name>.v<version>  (e.g. multi-tenant-operator.v1.1.0)
+          Leave blank when adding the first bundle to the channel.
+        required: false
+        type: string
+
+jobs:
+  update-catalog:
+    name: Render bundle and update FBC catalog
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install opm
+        run: |
+          curl -sSLo /usr/local/bin/opm \
+            "https://github.com/operator-framework/operator-registry/releases/download/v1.55.0/linux-amd64-opm"
+          chmod +x /usr/local/bin/opm
+
+      # On first registration: generate the olm.package entry with opm init.
+      # Subsequent calls leave package.yaml unchanged so the package-level
+      # defaultChannel and description are not overwritten accidentally.
+      - name: Initialise package entry (first registration only)
+        env:
+          OPERATOR_DESCRIPTION: ${{ inputs.operator_description }}
+        run: |
+          PKG_DIR="catalog/${{ inputs.operator_name }}"
+          mkdir -p "${PKG_DIR}"
+          if [ ! -f "${PKG_DIR}/package.yaml" ]; then
+            DESC_FLAG=()
+            if [ -n "$OPERATOR_DESCRIPTION" ]; then
+              printf '%s\n' "$OPERATOR_DESCRIPTION" > /tmp/op-desc.md
+              DESC_FLAG=(--description=/tmp/op-desc.md)
+            fi
+            opm init "${{ inputs.operator_name }}" \
+              --default-channel="${{ inputs.channel }}" \
+              "${DESC_FLAG[@]}" \
+              --output yaml > "${PKG_DIR}/package.yaml"
+          fi
+
+      # opm render pulls the bundle image from the registry and emits the
+      # olm.bundle YAML blob that FBC requires.  Bundles accumulate in
+      # bundles.yaml; opm validate treats all *.yaml files in the directory
+      # as a single logical package, so splitting by schema type is fine.
+      - name: Render bundle metadata into catalog
+        run: |
+          opm render "${{ inputs.bundle_image }}" --output=yaml \
+            >> "catalog/${{ inputs.operator_name }}/bundles.yaml"
+
+      # Add (or extend) the olm.channel entry in channels.yaml.
+      # PyYAML is safe to use here because channels.yaml contains only
+      # olm.channel documents – small structured data with no embedded JSON.
+      - name: Update channel definition
+        env:
+          BUNDLE_NAME: ${{ inputs.operator_name }}.v${{ inputs.operator_version }}
+          REPLACES: ${{ inputs.replaces_bundle }}
+          CHANNEL: ${{ inputs.channel }}
+          PACKAGE: ${{ inputs.operator_name }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, yaml
+
+          channels_file = f"catalog/{os.environ['PACKAGE']}/channels.yaml"
+          bundle_name   = os.environ['BUNDLE_NAME']
+          replaces      = os.environ.get('REPLACES', '').strip()
+          channel       = os.environ['CHANNEL']
+          package       = os.environ['PACKAGE']
+
+          new_entry = {'name': bundle_name}
+          if replaces:
+              new_entry['replaces'] = replaces
+
+          if os.path.exists(channels_file):
+              with open(channels_file) as f:
+                  docs = [d for d in yaml.safe_load_all(f) if d]
+          else:
+              docs = []
+
+          channel_doc = next(
+              (d for d in docs
+               if d.get('schema') == 'olm.channel' and d.get('name') == channel),
+              None
+          )
+          if channel_doc:
+              channel_doc.setdefault('entries', []).append(new_entry)
+          else:
+              docs.append({
+                  'schema': 'olm.channel',
+                  'package': package,
+                  'name': channel,
+                  'entries': [new_entry],
+              })
+
+          with open(channels_file, 'w') as f:
+              for doc in docs:
+                  yaml.dump(doc, f, default_flow_style=False, sort_keys=False)
+                  f.write('---\n')
+          PYEOF
+
+      # Validate the entire catalog directory – covers all operators at once.
+      - name: Validate full catalog
+        run: opm validate catalog
+
+      - name: Commit and push to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "catalog/${{ inputs.operator_name }}/"
+          git commit -m "chore: update catalog index for ${{ inputs.operator_name }} ${{ inputs.operator_version }}"
+          git push origin main

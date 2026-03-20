@@ -1,0 +1,4 @@
+---
+defaultChannel: stable
+name: multi-tenant-operator
+schema: olm.package
