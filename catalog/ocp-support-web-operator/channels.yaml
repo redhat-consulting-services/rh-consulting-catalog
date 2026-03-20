@@ -1,0 +1,6 @@
+entries:
+- name: ocp-support-web-operator.v1.8.2
+name: alpha
+package: ocp-support-web-operator
+schema: olm.channel
+---
