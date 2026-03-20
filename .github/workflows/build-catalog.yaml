@@ -1,0 +1,143 @@
+name: Build and Push Catalog
+
+on:
+  repository_dispatch:
+    types: [operator-release]
+  workflow_dispatch:
+    inputs:
+      operator:
+        description: "Operator name (directory under operators/)"
+        required: true
+        type: string
+      bundle_image:
+        description: "Full bundle image reference (e.g. quay.io/redhat-consulting-services/ocp-support-web-operator-bundle:v1.8.2)"
+        required: true
+        type: string
+
+env:
+  CATALOG_IMAGE: quay.io/redhat-consulting-services/rh-consulting-catalog
+
+jobs:
+  update-catalog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set operator info
+        id: info
+        run: |
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            echo "operator=${{ github.event.client_payload.operator }}" >> "$GITHUB_OUTPUT"
+            echo "bundle_image=${{ github.event.client_payload.bundle_image }}" >> "$GITHUB_OUTPUT"
+            echo "version=${{ github.event.client_payload.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "operator=${{ inputs.operator }}" >> "$GITHUB_OUTPUT"
+            echo "bundle_image=${{ inputs.bundle_image }}" >> "$GITHUB_OUTPUT"
+            VERSION=$(echo "${{ inputs.bundle_image }}" | grep -oP 'v[\d.]+$' || echo "latest")
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to Red Hat registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.redhat.io
+          username: ${{ secrets.REDHAT_REGISTRY_USER }}
+          password: ${{ secrets.REDHAT_REGISTRY_PASSWORD }}
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_IO_USERNAME }}
+          password: ${{ secrets.QUAY_IO_PASSWORD }}
+
+      - name: Install opm
+        run: |
+          OPM_VERSION=$(curl -s https://api.github.com/repos/operator-framework/operator-registry/releases/latest | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+          curl -sLO "https://github.com/operator-framework/operator-registry/releases/download/v${OPM_VERSION}/linux-amd64-opm"
+          chmod +x linux-amd64-opm
+          sudo mv linux-amd64-opm /usr/local/bin/opm
+
+      - name: Render bundle into catalog
+        run: |
+          OPERATOR="${{ steps.info.outputs.operator }}"
+          BUNDLE="${{ steps.info.outputs.bundle_image }}"
+          VERSION="${{ steps.info.outputs.version }}"
+          VERSION_NUM="${VERSION#v}"
+
+          OPERATOR_DIR="operators/${OPERATOR}"
+          OPERATOR_YAML="${OPERATOR_DIR}/operator.yaml"
+          CHANNEL_YAML="${OPERATOR_DIR}/channel.yaml"
+
+          if [[ ! -d "${OPERATOR_DIR}" ]]; then
+            echo "ERROR: Operator directory ${OPERATOR_DIR} does not exist"
+            exit 1
+          fi
+
+          # Remove existing entry for this version if present
+          python3 -c "
+          import sys
+          content = open('${OPERATOR_YAML}').read()
+          parts = content.split('\n---\n')
+          filtered = [p for p in parts if 'name: ${OPERATOR}.v${VERSION_NUM}\n' not in p]
+          result = '\n---\n'.join(filtered)
+          if not result.endswith('\n'):
+              result += '\n'
+          open('${OPERATOR_YAML}', 'w').write(result)
+          "
+
+          # Append freshly rendered bundle
+          echo '---' >> "${OPERATOR_YAML}"
+          opm render "${BUNDLE}" -o yaml >> "${OPERATOR_YAML}"
+
+          # Update channel to include this version if not already present
+          if ! grep -q "${OPERATOR}.v${VERSION_NUM}" "${CHANNEL_YAML}"; then
+            PREV=$(grep '  - name:' "${CHANNEL_YAML}" | tail -1 | sed 's/.*name: //')
+            echo "  - name: ${OPERATOR}.v${VERSION_NUM}" >> "${CHANNEL_YAML}"
+            echo "    replaces: ${PREV}" >> "${CHANNEL_YAML}"
+          fi
+
+          # Validate the entire catalog (all operators)
+          opm validate operators/
+
+      - name: Determine tags
+        id: tags
+        run: |
+          VERSION="${{ steps.info.outputs.version }}"
+          {
+            echo "tags<<EOF"
+            echo "${VERSION}"
+            echo "latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build catalog image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.CATALOG_IMAGE }}
+          tags: ${{ steps.tags.outputs.tags }}
+          containerfiles: ./Containerfile
+          context: .
+
+      - name: Push catalog to Quay.io
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: rh-consulting-catalog
+          registry: quay.io/redhat-consulting-services
+          tags: ${{ steps.tags.outputs.tags }}
+
+      - name: Commit updated catalog configs
+        run: |
+          OPERATOR="${{ steps.info.outputs.operator }}"
+          VERSION="${{ steps.info.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "operators/${OPERATOR}/"
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "feat: update ${OPERATOR} to ${VERSION}"
+            git push
+          fi
