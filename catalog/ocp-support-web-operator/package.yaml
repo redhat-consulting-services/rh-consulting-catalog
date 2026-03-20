@@ -1,0 +1,4 @@
+---
+defaultChannel: alpha
+name: ocp-support-web-operator
+schema: olm.package
