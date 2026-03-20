@@ -59,7 +59,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: catalog/rh-consulting-catalog.Dockerfile
+          file: rh-consulting-catalog.Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_TAG_BASE }}:${{ steps.tag.outputs.name }}
