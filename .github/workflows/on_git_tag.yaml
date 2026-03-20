@@ -42,9 +42,6 @@ jobs:
           fi
           opm validate catalog
 
-      - name: Generate catalog Dockerfile
-        run: opm generate dockerfile catalog
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
