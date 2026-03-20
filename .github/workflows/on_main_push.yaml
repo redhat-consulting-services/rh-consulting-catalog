@@ -1,0 +1,37 @@
+name: Create Version Tag on Main Push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  create-tag:
+    name: Bump catalog patch version tag
+    if: "${{ startsWith(github.event.head_commit.message, 'chore: update catalog index for ') }}"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history required so git-tag-bump can find the latest tag.
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Bumps the patch segment of the latest semver tag (e.g. v1.0.3 → v1.0.4)
+      # and pushes the new annotated tag.  The v-prefix keeps tags as v<semver>.
+      # To bump minor or major instead, change --bump accordingly or call the
+      # workflow manually after adjusting this file.
+      - name: Bump patch version and push tag
+        uses: leonsteinhaeuser/git-tag-bump@v1.3.0
+        with:
+          args: >-
+            --bump patch
+            --v-prefix
+            --create
+            --actor-name "github-actions[bot]"
+            --actor-email "github-actions[bot]@users.noreply.github.com"
