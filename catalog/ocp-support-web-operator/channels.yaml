@@ -4,6 +4,8 @@ entries:
   replaces: ocp-support-web-operator.v1.9.0
 - name: ocp-support-web-operator.v2.1.0
   replaces: ocp-support-web-operator.v2.0.0
+- name: ocp-support-web-operator.v2.2.0
+  replaces: ocp-support-web-operator.v2.1.0
 name: alpha
 package: ocp-support-web-operator
 schema: olm.channel
