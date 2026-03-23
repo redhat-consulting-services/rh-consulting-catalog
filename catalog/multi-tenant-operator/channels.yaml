@@ -1,0 +1,6 @@
+---
+entries:
+- name: multi-tenant-operator.v0.1.0
+name: alpha
+package: multi-tenant-operator
+schema: olm.channel
