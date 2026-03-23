@@ -34,4 +34,4 @@ jobs:
             --v-prefix
             --create
             --actor-name "github-actions[bot]"
-            --actor-email "github-actions[bot]@users.noreply.github.com"
+            --actor-mail "github-actions[bot]@users.noreply.github.com"
