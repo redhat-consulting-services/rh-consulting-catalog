@@ -1,0 +1,30 @@
+---
+image: quay.io/redhat-consulting-services/multi-tenant-operator-bundle:v0.1.0
+name: multi-tenant-operator.v0.1.0
+package: multi-tenant-operator
+properties:
+- type: olm.gvk
+  value:
+    group: tenant.openshift.io
+    kind: MultiTenantConfig
+    version: v1alpha1
+- type: olm.gvk
+  value:
+    group: tenantconfig.openshift.io
+    kind: NamespaceLimitRange
+    version: v1alpha1
+- type: olm.gvk
+  value:
+    group: tenantconfig.openshift.io
+    kind: NamespaceResourceQuota
+    version: v1alpha1
+- type: olm.package
+  value:
+    packageName: multi-tenant-operator
+    version: 0.1.0
+relatedImages:
+- image: quay.io/redhat-consulting-services/multi-tenant-operator-bundle:v0.1.0
+  name: bundle
+- image: quay.io/redhat-consulting-services/multi-tenant-operator:v0.1.0
+  name: operator
+schema: olm.bundle
