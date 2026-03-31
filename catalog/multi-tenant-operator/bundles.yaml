@@ -224,8 +224,7 @@ relatedImages:
   name: operator
 schema: olm.bundle
 ---
----
-image: ""
+image: quay.io/redhat-consulting-services/multi-tenant-operator-bundle:v0.2.0
 name: multi-tenant-operator.v0.2.0
 package: multi-tenant-operator
 properties:
